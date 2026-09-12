@@ -119,12 +119,11 @@ def build_user_state(
     )
     
     for event in all_events:
-        if event.settlement_date and event.settlement_date < request_date:
-            if event.status == "settled":
-                state.current_balance += event.home_amount
-        elif event.settlement_date and event.settlement_date >= request_date:
+        if event.settlement_date and event.settlement_date >= request_date:
             if event.direction > 0:
                 if event.status == "settled" or event.is_recurring_income:
+                    state.confirmed_income.append(event)
+                elif event.status == "scheduled" and "salary" in event.category.lower():
                     state.confirmed_income.append(event)
                 elif event.status in ["pending", "scheduled"]:
                     pass

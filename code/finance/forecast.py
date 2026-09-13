@@ -3,6 +3,7 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
 from collections import defaultdict
 import logging
+from statistics import mean
 
 from finance.events import NormalizedEvent
 from finance.state import UserFinancialState
@@ -31,6 +32,23 @@ class ForecastResult:
     is_safe: bool
 
 
+def compute_variable_essential_budget(resolved_events: List[NormalizedEvent], request_date: date) -> Dict[str, float]:
+    variable_categories = {"groceries", "transport"}
+    budgets = {}
+    
+    for cat in variable_categories:
+        cat_events = [e for e in resolved_events if e.category.lower() == cat and e.direction < 0 and e.status == "settled" and e.settlement_date and e.settlement_date < request_date]
+        if cat_events:
+            cat_events.sort(key=lambda e: e.settlement_date)
+            recent = cat_events[-12:]
+            amounts = [e.home_amount for e in recent]
+            if amounts:
+                monthly_budget = mean(amounts) * (30 / 7)
+                budgets[cat] = monthly_budget
+    
+    return budgets
+
+
 def run_forecast(
     state: UserFinancialState,
     request_payments: Optional[List[Tuple[date, float]]] = None,
@@ -40,10 +58,15 @@ def run_forecast(
     request_date = state.request_date
     horizon_end = request_date + timedelta(days=90)
     
+    variable_budgets = compute_variable_essential_budget(
+        [e for e in (state.confirmed_income + state.recurring_income + state.essential_expenses + state.flexible_expenses + state.confirmed_payments + state.pending_debits) if not (hasattr(e, 'event_id') and 'recur_' in e.event_id)],
+        request_date
+    )
+    
     all_events = []
     all_events.extend(state.confirmed_income)
     all_events.extend(state.recurring_income)
-    all_events.extend(state.essential_expenses)
+    all_events.extend([e for e in state.essential_expenses if e.category.lower() not in {"groceries", "transport"}])
     all_events.extend(state.flexible_expenses)
     all_events.extend(state.confirmed_payments)
     all_events.extend(state.pending_debits)
@@ -93,12 +116,26 @@ def run_forecast(
             elif event.direction > 0:
                 daily_flows[d]["income"] += event.home_amount
             else:
-                if event.is_recurring_essential or (not event.is_recurring_flexible and event.category in ["rent", "housing", "utilities", "groceries", "transport", "education", "debt_repayment"]):
+                if event.is_recurring_essential or (not event.is_recurring_flexible and event.category in ["rent", "housing", "utilities", "education", "debt_repayment"]):
                     daily_flows[d]["essential"] += event.home_amount
                 elif event.is_recurring_flexible:
                     daily_flows[d]["flexible"] += event.home_amount
                 else:
                     daily_flows[d]["confirmed"] += event.home_amount
+    
+    for cat, monthly_budget in variable_budgets.items():
+        current = request_date.replace(day=1)
+        if current < request_date:
+            if current.month == 12:
+                current = current.replace(year=current.year + 1, month=1)
+            else:
+                current = current.replace(month=current.month + 1)
+        while current <= horizon_end:
+            daily_flows[current]["essential"] += monthly_budget
+            if current.month == 12:
+                current = current.replace(year=current.year + 1, month=1)
+            else:
+                current = current.replace(month=current.month + 1)
     
     daily_forecasts = []
     balance = state.current_balance

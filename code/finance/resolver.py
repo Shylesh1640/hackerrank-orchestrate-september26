@@ -106,17 +106,18 @@ class EventResolver:
             by_category[(event.user_id, event.category, event.direction)].append(event)
         
         recurring_categories = {"rent", "housing", "utilities", "education", "debt_repayment", "salary", "subscription"}
-        non_recurring_categories = {"groceries", "transport", "dining", "shopping", "entertainment", "shopping"}
+        variable_essential_categories = {"groceries", "transport"}
         
         for key, group in by_category.items():
             user_id, category, direction = key
-            if len(group) >= 3:
+            min_occurrences = 2 if direction > 0 else 3
+            if len(group) >= min_occurrences:
                 group.sort(key=lambda e: e.event_date)
                 
                 is_recurring_category = any(rc in category.lower() for rc in recurring_categories)
-                is_non_recurring_category = any(nrc in category.lower() for nrc in non_recurring_categories)
+                is_variable_essential = any(vc in category.lower() for vc in variable_essential_categories)
                 
-                if is_non_recurring_category and not is_recurring_category:
+                if is_variable_essential:
                     continue
                 
                 intervals = []
@@ -140,8 +141,6 @@ class EventResolver:
                 if intervals:
                     most_common = max(set(intervals), key=intervals.count)
                     if intervals.count(most_common) >= 2:
-                        if is_non_recurring_category and amount_cv > 0.3:
-                            continue
                         if amount_cv > 0.5 and not is_recurring_category:
                             continue
                         

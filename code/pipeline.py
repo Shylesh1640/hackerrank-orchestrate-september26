@@ -33,18 +33,25 @@ def process_request(request_id: str, data_bundle, converter) -> Dict:
     
     logger.info(f"Processing {request_id} for {user_id} on {request_date}")
     
-    state = build_user_state(data_bundle, request_id, request_date, converter)
-    
+    # Get messages and images first to extract facts
     messages = get_user_messages(data_bundle, user_id, request_id)
+    images = get_linked_images(data_bundle, request_id)
+    
+    # Extract message facts
+    message_facts = []
     for _, msg in messages.iterrows():
         facts = extract_facts_from_message(msg)
-        state.__dict__["events"] = apply_message_facts(facts, state.__dict__.get("events", []), converter, state.home_currency)
+        message_facts.extend(facts)
     
-    images = get_linked_images(data_bundle, request_id)
+    # Extract image facts
+    image_extractions = []
     for _, img in images.iterrows():
         extraction = extract_image_facts(str(img["image_id"]), CONFIG.images_dir)
         if extraction:
-            state.__dict__["events"] = apply_image_facts(extraction, state.__dict__.get("events", []), converter, state.home_currency, request_date)
+            image_extractions.append(extraction)
+    
+    # Build state with message/image facts
+    state = build_user_state(data_bundle, request_id, request_date, converter, message_facts, image_extractions)
     
     amount_safe = calculate_amount_safe_to_pay(state, requested_amount, request_date)
     earliest_full = calculate_earliest_full_payment(state, requested_amount, request_date, desired_completion)

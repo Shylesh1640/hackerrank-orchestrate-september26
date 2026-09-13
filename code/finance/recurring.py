@@ -15,15 +15,20 @@ def generate_recurring_events(
 ) -> List[NormalizedEvent]:
     recurring_events = []
     
+    by_category = defaultdict(list)
     for event in events:
-        if not event.recurrence_pattern:
-            continue
+        if event.recurrence_pattern:
+            by_category[(event.user_id, event.category, event.direction)].append(event)
+    
+    for (user_id, category, direction), group in by_category.items():
+        group.sort(key=lambda e: e.event_date)
+        representative = group[-1]
         
-        pattern = event.recurrence_pattern
+        pattern = representative.recurrence_pattern
         freq = pattern["frequency"]
         interval = pattern["interval_days"]
         
-        last_date = event.event_date
+        last_date = representative.event_date
         while last_date < start_date:
             last_date += timedelta(days=interval)
         
@@ -32,28 +37,28 @@ def generate_recurring_events(
         while current_date <= end_date:
             if current_date >= start_date:
                 new_event = NormalizedEvent(
-                    event_id=f"{event.event_id}_recur_{occurrence}",
-                    user_id=event.user_id,
-                    event_type=event.event_type,
-                    description=f"{event.description} (recurring)",
-                    category=event.category,
-                    direction=event.direction,
-                    amount=event.amount,
-                    currency=event.currency,
-                    home_amount=event.home_amount,
+                    event_id=f"{representative.event_id}_recur_{occurrence}",
+                    user_id=user_id,
+                    event_type=representative.event_type,
+                    description=f"{representative.description} (recurring)",
+                    category=category,
+                    direction=direction,
+                    amount=representative.amount,
+                    currency=representative.currency,
+                    home_amount=representative.home_amount,
                     event_date=current_date,
                     settlement_date=current_date,
                     status="scheduled",
-                    linked_event_id=event.event_id,
+                    linked_event_id=representative.event_id,
                     recurring=True,
                     frequency=freq,
-                    flexibility=event.flexibility,
-                    minimum_allowed_amount=event.minimum_allowed_amount,
+                    flexibility=representative.flexibility,
+                    minimum_allowed_amount=representative.minimum_allowed_amount,
                     source_row_index=-1,
-                    is_recurring_income=event.is_recurring_income,
-                    is_recurring_essential=event.is_recurring_essential,
-                    is_recurring_flexible=event.is_recurring_flexible,
-                    recurrence_pattern=event.recurrence_pattern,
+                    is_recurring_income=representative.is_recurring_income,
+                    is_recurring_essential=representative.is_recurring_essential,
+                    is_recurring_flexible=representative.is_recurring_flexible,
+                    recurrence_pattern=representative.recurrence_pattern,
                 )
                 recurring_events.append(new_event)
             

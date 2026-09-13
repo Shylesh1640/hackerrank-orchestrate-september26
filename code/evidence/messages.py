@@ -33,8 +33,9 @@ def parse_salary_message(message_text: str, sent_at: date) -> List[ExtractedFact
     text = message_text.lower()
     
     amount_patterns = [
-        r"(?:salary|pay|gaji|penggajian).*?(\d[\d,\.]*)\s*(?:inr|zar|idr|usd|eur|rs\.?|r\$?)",
-        r"(\d[\d,\.]*)\s*(?:inr|zar|idr|usd|eur|rs\.?|r\$?).*?(?:salary|pay|gaji|monthly)",
+        r"(?:salary|pay|gaji|penggajian|menjadi|naik).*?(\d[\d,\.]*)\s*(?:inr|zar|idr|usd|eur|rs\.?|r\$)",
+        r"(?:inr|zar|idr|usd|eur|rs\.?|r\$)\s*(\d[\d,\.]*)",
+        r"(\d[\d,\.]*)\s*(?:inr|zar|idr|usd|eur|rs\.?|r\$).*?(?:salary|pay|gaji|monthly|bulanan)",
         r"monthly.*?(\d[\d,\.]*)\s*(?:inr|zar|idr|usd|eur)",
     ]
     
@@ -73,13 +74,18 @@ def parse_salary_message(message_text: str, sent_at: date) -> List[ExtractedFact
                 pass
     
     if amount is not None:
+        # Employer messages about salary changes are typically confirmed
+        is_confirmed = "confirmed" in text or "dikonfirmasi" in text
+        # Also treat as confirmed if it's a definite statement about future salary
+        if not is_confirmed and any(w in text for w in ["naik menjadi", "increase to", "will be", "akan menjadi", "berubah", "changed to"]):
+            is_confirmed = True
         facts.append(ExtractedFact(
             fact_type="salary_change",
             event_id=None,
             amount=amount,
             currency=currency,
             effective_date=effective_date or sent_at,
-            status="confirmed" if "confirmed" in text or "dikonfirmasi" in text else "pending",
+            status="confirmed" if is_confirmed else "pending",
             source_message_id="",
             confidence=0.8,
         ))

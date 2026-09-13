@@ -30,8 +30,17 @@ def verify_plan(
     total_paid = sum(p[1] for p in plan.payments)
     requested_amount = float(request["requested_amount"])
     
-    if abs(total_paid - requested_amount) > 0.01:
-        if plan.method != "partial_payment" or total_paid > requested_amount:
+    if plan.method == "installments":
+        if plan.total_cost > 0:
+            if abs(total_paid - plan.total_cost) > 0.01:
+                errors.append(f"Installment payment total {total_paid} != option total {plan.total_cost}")
+        elif abs(total_paid - requested_amount) > 0.01:
+            errors.append(f"Payment total {total_paid} != requested {requested_amount}")
+    elif plan.method == "partial_payment":
+        if abs(total_paid - requested_amount) > 0.01:
+            errors.append(f"Partial payment total {total_paid} != requested {requested_amount}")
+    else:
+        if abs(total_paid - requested_amount) > 0.01:
             errors.append(f"Payment total {total_paid} != requested {requested_amount}")
     
     if plan.method == "partial_payment":
@@ -44,9 +53,6 @@ def verify_plan(
                 errors.append("First partial payment must be on request_date")
             if abs(first_amt + second_amt - requested_amount) > 0.01:
                 errors.append("Partial payments must sum to requested amount")
-    
-    if plan.method == "installments" and plan.payment_option_id:
-        pass
     
     completion_date = max(p[0] for p in plan.payments)
     desired_completion = request.get("desired_completion_date")

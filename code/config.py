@@ -39,7 +39,7 @@ class Config:
         if self.images_dir is None:
             self.images_dir = self.data_dir / "media" / "images"
         if self.output_file is None:
-            self.output_file = self.data_dir / "output.csv"
+            self.output_file = self.data_dir.parent / "output.csv"
 
 CONFIG = Config()
 
